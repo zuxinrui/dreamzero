@@ -70,7 +70,7 @@ instance/
 .cursor/
 .cursor*
 .claude/
-CLAUDE.md
+# CLAUDE.md
 
 # Scrapy stuff:
 .scrapy

@@ -1,6 +1,6 @@
 # CLAUDE.md — DreamZero Quick Reference
 
-NVIDIA GEAR Lab 的 **World Action Model**:用 Wan 视频扩散模型 + action/state register 改造成机器人策略,同步预测视频和 24 步动作 chunk,flow matching 训练,自回归块扩散推理。完整技术细节见 `docs/ALGORITHM_AND_DEPLOYMENT.md`。
+NVIDIA GEAR Lab 的 **World Action Model**:用 Wan 视频扩散模型 + action/state register 改造成机器人策略,同步预测视频和 24 步动作 chunk,flow matching 训练,自回归块扩散推理。完整技术细节见 `docs/2026-04-21_ALGORITHM_AND_DEPLOYMENT.md`。
 
 ---
 
@@ -98,9 +98,9 @@ NVIDIA GEAR Lab 的 **World Action Model**:用 Wan 视频扩散模型 + action/s
 | Isaac Lab sim client | `eval_utils/run_sim_eval.py` |
 | WebSocket client | `eval_utils/policy_client.py` |
 | 训练入口 | `groot/vla/experiment/experiment.py` |
-| 详细技术手册 | `docs/ALGORITHM_AND_DEPLOYMENT.md` |
-| 5B 架构说明 | `docs/WAN22_BACKBONE.md` |
-| 新 embodiment 指南 | `docs/DATASET_TO_GEAR_AND_TRAIN.md` |
+| 详细技术手册 | `docs/2026-04-21_ALGORITHM_AND_DEPLOYMENT.md` |
+| 5B 架构说明 | `docs/2026-04-19_WAN22_BACKBONE.md` |
+| 新 embodiment 指南 | `docs/2026-02-28_DATASET_TO_GEAR_AND_TRAIN.md` |
 
 ## 环境与安装
 

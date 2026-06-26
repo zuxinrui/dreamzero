@@ -161,7 +161,7 @@ dreamzero/
 │   ├── droid_training.sh           # Wan2.1 backbone
 │   └── droid_training_wan22.sh     # Wan2.2 backbone
 └── docs/
-    └── WAN22_BACKBONE.md          # This file
+    └── 2026-04-19_WAN22_BACKBONE.md          # This file
 ```
 
 The action head (`wan_flow_matching_action_tf.py`) automatically detects Wan2.2 vs Wan2.1 based on `in_dim` (48 vs 16) and `vae.z_dim` (48 vs 16), and loads the correct checkpoint files from the appropriate HuggingFace repos when local paths are not found.

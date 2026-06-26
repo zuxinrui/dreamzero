@@ -500,9 +500,9 @@ chunk_2  = policy(s_future, text)                        # 从未来状态开始
 | 训练脚本 (DROID full FT WAN22) | `scripts/train/droid_training_full_finetune_wan22.sh` |
 | LoRA 脚本 | `scripts/train/droid_training_lora.sh` |
 | 迁移脚本 (AgiBot/YAM) | `scripts/train/{agibot,yam}_training.sh` |
-| WAN22 架构文档 | `docs/WAN22_BACKBONE.md` |
-| DROID 数据转换 | `docs/DROID_CONVERSION.md` |
-| 新 embodiment 指引 | `docs/DATASET_TO_GEAR_AND_TRAIN.md` |
+| WAN22 架构文档 | `docs/2026-04-19_WAN22_BACKBONE.md` |
+| DROID 数据转换 | `docs/2026-02-15_DROID_CONVERSION.md` |
+| 新 embodiment 指引 | `docs/2026-02-28_DATASET_TO_GEAR_AND_TRAIN.md` |
 
 ## 附录 B · 参数速查
 

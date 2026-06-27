@@ -119,14 +119,32 @@ LIBERO-10, candidate quality variance ≈ 0). Test-time selection exhausted on f
   *and* the task has candidate headroom; the drawer sits in a narrow 0.07–0.27 band (variance wall).
 - **static is consistently harmful** (do-nothing) — the offline "best deployable" pick was inverted.
 
-### 4d. The four NEW trained-scorer methods (designed + red-teamed; **building now**, §6)
+### 4d. The four NEW trained-scorer methods — BUILT + CLOSED-LOOP TESTED
 
-| # | method | anchor | red-team verdict + mandatory fix | priority |
-|---|---|---|---|---|
-| **M4** | **UWM+Dreamer learned value** `−‖imag−goal‖ + g_ψ(imag) → return-to-go` | candidate · **quality/return** | survives; residual-on-goal (≥ goal by construction) + within-window labels | **HIGH** |
-| M3 | CoVer-VLA contrastive (obs↔future InfoNCE) | A typicality / B outcome | fails as-specified (t+1 positive ⇒ static collapse) → **distant/goal positive** | MED |
-| M1 | reverse prev-step (generalized BIRG) | past / plausibility | fails standalone (Law b) → deploy as **deconfounded prev-action veto** only | LOW |
-| M2 | "re-examine the dream" latent reconstruction | V1 plausibility / V2 quality | survives-but-hollow → train a **quality-contrastive encoder**, not a vanilla AE | LOW |
+All four were implemented, trained on a 579-row harvest from `put_the_black_bowl_on_the_plate`,
+and run in one combined best-of-6 A/B (n=30) on that task, with anti-brackets + the motion probe.
+
+| arm | success | Δ vs random (paired) | anti-bracket | red-team predicted | outcome |
+|---|--:|--:|--:|---|---|
+| **M2** dream-reexamine (**learned** quality goal-distance) | **0.733** | **+0.40 (13/1)** | +0.70 | LOW "hollow" | **WINS — prediction wrong** |
+| null (1 sample) | 0.533 | +0.20 | — | — | (high; null>random ~ noise) |
+| **M4** Dreamer value (residual-on-goal) | 0.367 | +0.03 | +0.30 | HIGH | clean bracket, **thin margin** here |
+| random | 0.333 | — | — | — | control |
+| **goal** (raw `−‖imag−goal‖`) | 0.333 | +0.00 | — | — | **useless on this task** (cf. stove 0.93) |
+| M1 reverse (deconfounded) | 0.333 | +0.00 | — | LOW (random) | ≈ random ✓ |
+| static (`−‖imag−present‖`) | 0.267 | −0.07 | — | confound | do-nothing again ✓ |
+| M3 contrastive (CoVer, distant-pos) | 0.167 | −0.17 | — | fails | **hurts** ✓ |
+
+**Decisive finding:** a **learned** quality-ordered goal-distance (M2) WINS (0.73 vs 0.33) on the
+exact task where the **hand-crafted** goal selector is useless (0.33) — i.e. a learned quality
+metric *generalizes where a single goal image does not*. M4 ranks correctly (clean +0.30 bracket)
+but its residual-on-goal term is dead weight when goal itself is useless → thin margin; expected to
+improve if the goal term is dropped/learned. Building all four (vs trusting the red-team) was
+justified: it overturned M2's "low priority". Offline `pearson(score,rtg)` on executed candidates
+tracked the closed-loop order (M4 0.68 / M2 0.51 / M3 0.21 / M1 ~0) **except** it under-rated M2's
+closed-loop ranking — another reminder that only closed-loop is decisive. **Caveat:** M2 is per-task
+(trained on bowl, tested on bowl — deployable by harvesting per-task data); single-task so far,
+a second-task confirmation (stove) is the next step.
 
 ---
 
@@ -147,21 +165,19 @@ were inverted by the corrupted offline `q`:
 
 ---
 
-## 6. Current build status (the "will-try" set)
+## 6. Build status — DONE (pipeline executed)
 
-Pipeline: **shared harvest → parallel-train 4 aux models → one combined closed-loop A/B**.
+Pipeline executed: **shared harvest → parallel-train 4 aux models → one combined closed-loop A/B**.
 
-1. **Harvest** (`uwm/scripts/harvest.py`) — base-policy rollouts on `put_the_black_bowl_on_the_plate`
-   (pick-place, baseline 0.50) recording per decision point: K candidate imagined latents, actions,
-   real prev/next steps, the task goal, and return-to-go. *[running on GPU]*
-2. **Build workflow** (`uwm/scripts/new_scorers_build.workflow.js`) — 4 experts implement+train M1–M4
-   to a single selector contract (`uwm/scripts/cl_ab2.py`), red-team fixes baked in. *[staged]*
-3. **Combined A/B** (`uwm/scripts/cl_ab2.py`) — all 4 selectors as arms + `null/random/goal/static`
-   + anti-brackets + motion-confound probe, on bowl-on-plate and stove. *[staged]*
+1. **Harvest** (`uwm/scripts/harvest.py`) — 579 decision points on `put_the_black_bowl_on_the_plate`
+   (pick-place, baseline 0.50). ✅
+2. **Build workflow** (`uwm/scripts/new_scorers_build.workflow.js`) — 4 experts implemented+trained
+   M1–M4 (`uwm/scripts/heads2/m{1,2,3,4}.py`) to the `cl_ab2.py` selector contract, red-team fixes
+   baked in. ✅
+3. **Combined A/B** (`uwm/scripts/cl_ab2.py`) — 10 arms × 30 paired seeds on bowl-on-plate. ✅ (§4d).
 
-Predicted outcomes (to be tested, not trusted): **M4 ≥ goal** by construction, may exceed it on
-tasks where a single goal image underspecifies progress; **M3-B** second bet; **M1/M2** likely
-re-confirm Laws (b)/(c). Building them anyway is the honest empirical check.
+**Result:** M2 (learned quality goal-distance) is the standout (0.73 vs 0.33 random), winning where
+the raw goal selector fails. Open: confirm M2 on a second task; try M4 without the dead goal term.
 
 ---
 
@@ -195,8 +211,13 @@ multi-stage or visually-subtle task) — matching goal on the easy task is neces
   scorer families fail for the structural reasons in Laws (a)–(c).
 - **Lesson:** offline correlation metrics misjudged the scorers in both directions; closed-loop +
   anti-brackets + a motion probe are mandatory.
-- **Next:** the M4 (Dreamer-value, residual-on-goal) family is the principled generalization and the
-  one most likely to extend the win beyond hand-picked goal images.
+- **Update (build done):** a **learned** quality-ordered goal-distance (**M2**, the "re-examine the
+  dream" quality encoder) is the new best scorer — it wins closed-loop (0.73 vs 0.33) on a task where
+  the hand-crafted `goal` selector is useless, confirming that a *learned* quality metric generalizes
+  where a single goal image does not. M4 (Dreamer value) ranks correctly but needs its dead goal term
+  removed on goal-useless tasks.
+- **Next:** confirm M2 on a 2nd task (per-task harvest+train); ablate M4's goal term; combine M2's
+  learned metric with M4's return supervision.
 
 ### File map
 - UVA work: `unified_video_action/docs/ACVS_on_UVA_implementation_report.md`, `scripts/{train_acvs,

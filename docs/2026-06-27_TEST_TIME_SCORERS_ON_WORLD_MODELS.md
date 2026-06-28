@@ -3,19 +3,24 @@
 **One question:** can a *frozen* video-action policy be improved at test time by scoring its
 own best-of-K candidate action chunks with a world model — no policy retraining?
 
-**One-line answer (so far):** It depends entirely on the world model and the scorer's *anchor*.
+**One-line answer:** It depends entirely on the world model and the scorer's *anchor*.
 On a weak, action-blind model (UVA) nothing works. On a strong, action-faithful model (UWM) a
-**candidate-level, quality-anchored** scorer can work *spectacularly* (a deployable goal-image
-selector lifts success **0.37 → 0.93** on one task), but the win is **task-specific** and most
-scorer families fail for structural reasons. Offline correlation metrics **systematically
-misjudged** which scorers work; only closed-loop success rate is admissible evidence.
+**candidate-level, quality-anchored** scorer can work *spectacularly* — but **which** scorer is
+the headline. A hand-crafted goal-image selector is a **task-specific bet** (lifts success
+**0.37 → 0.93** on one task, but is the *worst* arm on another). The robust winner is a
+**pure learned value head over the world model's imagined latent** (Dreamer-style, **goal-free at
+inference**): it is the best arm on **both** confirmed tasks (bowl **0.57 → 0.83**, stove **0.43 →
+0.97**), and *residualizing it on goal-distance inherits the goal's failure mode*. Offline
+correlation metrics **systematically misjudged** which scorers work; only closed-loop success rate
+(paired, n=30, anti-brackets) is admissible evidence.
 
 > Scope note. This is a research thread run on two cloned repos (`unified_video_action` = UVA,
 > `unified-world-model` = UWM) outside DreamZero proper. Detailed working logs live there
 > (`unified_video_action/docs/ACVS_on_UVA_implementation_report.md`,
 > `uwm/docs/SCORER_COMPARISON.md`, `uwm/docs/NEW_SCORERS_EVAL.md`); this is the self-contained
 > master summary, mirrored into the DreamZero repo because it is the only repo we own.
-> Date: 2026-06-27.
+> Date: 2026-06-27 (rev. 2026-06-28 — added §4e: 2-task n=30 confirmation, goal-ablation `m4pure`
+> as universal winner, fusion null result).
 
 ---
 
@@ -142,9 +147,49 @@ but its residual-on-goal term is dead weight when goal itself is useless → thi
 improve if the goal term is dropped/learned. Building all four (vs trusting the red-team) was
 justified: it overturned M2's "low priority". Offline `pearson(score,rtg)` on executed candidates
 tracked the closed-loop order (M4 0.68 / M2 0.51 / M3 0.21 / M1 ~0) **except** it under-rated M2's
-closed-loop ranking — another reminder that only closed-loop is decisive. **Caveat:** M2 is per-task
-(trained on bowl, tested on bowl — deployable by harvesting per-task data); single-task so far,
-a second-task confirmation (stove) is the next step.
+closed-loop ranking — another reminder that only closed-loop is decisive. (This single-task table
+is superseded by the 2-task confirmation in **§4e**, which both raised n to 30 and added the goal
+ablation `m4pure` + fusion `m5fuse`.)
+
+### 4e. Cross-task confirmation — the complete 2×2 matrix (n=30 each, the decisive run)
+
+Re-harvested a second task (`turn_on_the_stove`, 477 rows) and **retrained all four heads on
+stove data** (M2/M4 are per-task value/encoder heads — bowl-trained weights do not transfer; the
+scripts were made `SCORER_NPZ`/`SCORER_ARTIFACT` env-overridable to retrain cleanly). Then ran the
+combined best-of-6 A/B at **n=30** on **both** tasks, adding two arms: **`m4pure`** = M4's pure
+learned value head `g_pure(imag)` with the goal term removed (**needs no goal image at inference**),
+and **`m5fuse`** = `z(M2) + z(m4pure)`.
+
+| arm | bowl `bowl_on_plate` | stove `turn_on_stove` | anti-bracket (bowl / stove) | verdict |
+|---|--:|--:|--:|---|
+| **m4pure** (pure learned value, **goal-free**) | **0.833** (25/30) | **0.967** (29/30) | 23/0 / 17/0 | ✅ **universal winner** |
+| **M2** (learned goal-distance) | 0.667 | **0.967** | 19/0 / **29/0** | ✅ ranks both; modest bowl margin |
+| m5fuse (M2 + m4pure) | 0.667 | 0.967 | — | ties, **no synergy** |
+| null (baseline) | 0.567 | 0.433 | — | — |
+| random | 0.367 | 0.533 | — | control |
+| **goal** (hand-crafted `−‖imag−goal‖`) | 0.333 | 0.933 | — | ❌ **task-specific** (hurts bowl) |
+| static (`−‖imag−present‖`) | 0.267 | 0.067 | — | ❌ do-nothing |
+| **M4** (residual-on-goal) | 0.233 | 0.733 | / | ❌ **inherits goal failure** |
+| anti_m4 | 0.067 | 0.400 | — | bracket floor |
+| anti_m2 | 0.033 | 0.000 | — | bracket floor |
+
+**Three decisive conclusions (all paired-McNemar significant):**
+1. **`m4pure` — a goal-free pure learned value head — is the universal winner.** Best on bowl
+   (0.83, **vs goal 15/0 p=3e-4**, vs M4 18/0 p=1e-4, vs null 12/4 p=0.08), tied-best on stove
+   (0.97). It uses **no goal image at inference** — only RTG-labelled harvest to train. This beats
+   M2 on deployability (M2 still needs a goal latent through its encoder).
+2. **The goal term is harmful, not protective.** `m4pure` (no goal) ≫ `m4` (residual-on-goal):
+   bowl 0.83 vs 0.23, stove 0.97 vs 0.73. Residualizing on `−‖imag−goal‖` **inherits the goal
+   selector's task-specific failure** — on bowl `goal` itself (0.33) is *below null* (0.57), and
+   M4 drags down with it. This **overturns the red-team's "residual-on-goal is the safe priority"**.
+3. **M2 ranks on both tasks** (anti-bracket 19/0 bowl, **29/0** stove — the cleanest signal in the
+   whole study) and **wins stove decisively** (0.97 vs null 0.43, 16/0 p=2e-4). But its **bowl
+   margin shrank at n=30** (0.667 vs null 0.567, 10/7, p=0.63 — n.s.); the earlier +0.40 at n=15
+   was small-n optimism. M2 is a confirmed *ranker*, a confirmed *stove winner*, but not a
+   significant *bowl* winner — `m4pure` is.
+
+**Fusion adds nothing** (m5fuse = M2 on bowl, ties ceiling on stove): once a single head is at the
+candidate-headroom ceiling, averaging a second adds no signal.
 
 ---
 
@@ -174,10 +219,15 @@ Pipeline executed: **shared harvest → parallel-train 4 aux models → one comb
 2. **Build workflow** (`uwm/scripts/new_scorers_build.workflow.js`) — 4 experts implemented+trained
    M1–M4 (`uwm/scripts/heads2/m{1,2,3,4}.py`) to the `cl_ab2.py` selector contract, red-team fixes
    baked in. ✅
-3. **Combined A/B** (`uwm/scripts/cl_ab2.py`) — 10 arms × 30 paired seeds on bowl-on-plate. ✅ (§4d).
+3. **Combined A/B** (`uwm/scripts/cl_ab2.py`) — bowl (§4d) then the 2-task n=30 matrix (§4e). ✅
+4. **2nd-task confirmation** — re-harvest stove (`harvest.py`, 477 rows) → retrain all 4 heads on
+   stove (env-overridable `SCORER_NPZ`/`SCORER_ARTIFACT`) → combined A/B on bowl + stove at n=30
+   with `m4pure` (goal ablation) and `m5fuse` (fusion) arms. ✅ (§4e).
 
-**Result:** M2 (learned quality goal-distance) is the standout (0.73 vs 0.33 random), winning where
-the raw goal selector fails. Open: confirm M2 on a second task; try M4 without the dead goal term.
+**Result:** the goal-free **pure learned value head `m4pure`** is the universal winner (bowl 0.83 /
+stove 0.97 — best on both); the **goal term is harmful** (residual-on-goal `m4` inherits goal's
+task-specificity); **M2** is a confirmed ranker + stove winner but only a modest bowl effect at n=30;
+**fusion adds nothing**. All planned follow-ups (2nd-task M2, M4 goal-ablation, M2+M4 fusion) closed.
 
 ---
 
@@ -211,13 +261,20 @@ multi-stage or visually-subtle task) — matching goal on the easy task is neces
   scorer families fail for the structural reasons in Laws (a)–(c).
 - **Lesson:** offline correlation metrics misjudged the scorers in both directions; closed-loop +
   anti-brackets + a motion probe are mandatory.
-- **Update (build done):** a **learned** quality-ordered goal-distance (**M2**, the "re-examine the
-  dream" quality encoder) is the new best scorer — it wins closed-loop (0.73 vs 0.33) on a task where
-  the hand-crafted `goal` selector is useless, confirming that a *learned* quality metric generalizes
-  where a single goal image does not. M4 (Dreamer value) ranks correctly but needs its dead goal term
-  removed on goal-useless tasks.
-- **Next:** confirm M2 on a 2nd task (per-task harvest+train); ablate M4's goal term; combine M2's
-  learned metric with M4's return supervision.
+- **Update (2-task confirmation done, §4e):** the winner is a **pure learned value head over the
+  world model's imagined latent** (`m4pure`, Dreamer-style `g_pure(imag)` regressing return-to-go,
+  **goal-free at inference**). It is the **best arm on both confirmed tasks** (bowl 0.57→0.83,
+  stove 0.43→0.97). Two hard lessons fell out: (i) **the goal term is harmful** — residualizing the
+  value on `−‖imag−goal‖` (`m4`) *inherits* the goal selector's task-specific failure (on bowl,
+  `goal` is below null and drags `m4` to 0.23); (ii) the earlier single-task M2 win was **n=15
+  optimism** — at n=30 M2 still ranks cleanly (anti-bracket 29/0 on stove) and wins stove, but its
+  bowl margin is n.s. **Fusion (M2+m4pure) adds nothing** once a head is at the headroom ceiling.
+- **Deployment recommendation:** train a small value head `g(imag)→RTG` on per-embodiment
+  success-labelled rollouts; select argmax at test time. No goal image, no policy retraining.
+- **Next (optional):** a 3rd task to tighten m4pure's CI; test whether `g(imag)` transfers across
+  tasks within an embodiment (the one thing that would make it *zero-shot* deployable, not
+  per-task); a within-window rank-loss head if all-K labels can be harvested (currently
+  executed-candidate-only).
 
 ### File map
 - UVA work: `unified_video_action/docs/ACVS_on_UVA_implementation_report.md`, `scripts/{train_acvs,
